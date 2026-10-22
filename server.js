@@ -135,10 +135,8 @@ function requireAdmin(req, res, next) {
 // MIDDLEWARE CORS
 // ==========================================
 const allowedOrigins = [
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://localhost:5174',
-  'http://127.0.0.1:5174'
+  'https://tejiendo-redes-a375d.web.app',
+  'https://tejiendo-redes-a375d.firebaseapp.com'
 ];
 
 app.use((req, res, next) => {
