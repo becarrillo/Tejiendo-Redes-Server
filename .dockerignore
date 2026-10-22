@@ -1,0 +1,16 @@
+# Secretos — nunca versionar
+.env
+.env.*
+!.env.example
+*firebase-adminsdk*.json
+secrets/
+*.key
+*.pem
+
+# Base de datos local
+rifa.db
+*.sqlite*
+
+# Dependencias y artefactos
+node_modules/
+*.log
