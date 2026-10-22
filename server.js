@@ -136,7 +136,8 @@ function requireAdmin(req, res, next) {
 // ==========================================
 const allowedOrigins = [
   'https://tejiendo-redes-a375d.web.app',
-  'https://tejiendo-redes-a375d.firebaseapp.com'
+  'https://tejiendo-redes-a375d.firebaseapp.com',
+  'https://console.cron-job.org/jobs/8701785'
 ];
 
 app.use((req, res, next) => {
@@ -178,8 +179,18 @@ function initDb() {
   // por defecto se usa rifa.db junto a server.js.
   const rutaBd = process.env.RIFA_DATABASE_PATH || path.join(__dirname, 'rifa.db');
   return new Promise((resolve, reject) => {
+    try {
+      // sqlite3 no crea directorios: si la ruta padre no existe, el arranque moriría
+      // con SQLITE_CANTOPEN. Se crea el arbol completo de una vez.
+      const dirBd = path.dirname(rutaBd);
+      if (!fs.existsSync(dirBd)) fs.mkdirSync(dirBd, { recursive: true });
+    } catch (error) {
+      return reject(new Error(`No se pudo crear el directorio para la base de datos en "${rutaBd}": ${error.message}`));
+    }
     db = new sqlite3.Database(rutaBd, (err) => {
-      if (err) return reject(err);
+      if (err) {
+        return reject(new Error(`No se pudo abrir la base de datos "${rutaBd}" (revisar permisos del usuario que corre node): ${err.message}`));
+      }
       db.serialize(() => {
         // Producción: NO se borra ni se siembra nada en el arranque.
         // Si no existen, se crean las tablas vacías la primera vez.
