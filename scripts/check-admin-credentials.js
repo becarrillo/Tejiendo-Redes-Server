@@ -1,6 +1,7 @@
 // Verifica que las credenciales de Firebase Admin cargan y funcionan de verdad.
 // Uso: node scripts/check-admin-credentials.js
-// Requiere GOOGLE_APPLICATION_CREDENTIALS (lo aporta backend/.env) y FIREBASE_PROJECT_ID.
+// Credenciales por variables de entorno (FIREBASE_*, lo aporta backend/.env),
+// con fallback opcional a GOOGLE_APPLICATION_CREDENTIALS si estuviera definido.
 const fs = require('fs');
 const path = require('path');
 
@@ -14,36 +15,42 @@ const path = require('path');
   }
 })();
 
-const { applicationDefault, initializeApp } = require('firebase-admin/app');
+const { applicationDefault, cert, initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 
-const CLAVE_VIEJA_ID = '0d3c4bb46637836fab14b5ac049fae4df08989f3'; // id de la clave actual (informativo)
-
 (async () => {
-  const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (!credPath || !fs.existsSync(credPath)) {
-    console.error('FALLO: GOOGLE_APPLICATION_CREDENTIALS no apunta a un archivo existente:', credPath);
-    process.exit(1);
+  let credential;
+  if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+    credential = cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey
+    });
+    console.log('Credenciales por variables de entorno:');
+  } else {
+    const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (!credPath || !fs.existsSync(credPath)) {
+      console.error('FALLO: define FIREBASE_PRIVATE_KEY + FIREBASE_CLIENT_EMAIL en .env (o GOOGLE_APPLICATION_CREDENTIALS):', credPath);
+      process.exit(1);
+    }
+    try {
+      const serviceAccount = JSON.parse(fs.readFileSync(credPath, 'utf8'));
+      if (!serviceAccount.private_key || !serviceAccount.client_email) {
+        throw new Error('El JSON no tiene las claves private_key / client_email');
+      }
+      credential = cert({
+        projectId: serviceAccount.project_id,
+        clientEmail: serviceAccount.client_email,
+        privateKey: serviceAccount.private_key
+      });
+    } catch (error) {
+      console.error('FALLO leyendo el JSON:', error.message);
+      process.exit(1);
+    }
   }
 
-  try {
-    const serviceAccount = JSON.parse(fs.readFileSync(credPath, 'utf8'));
-    if (!serviceAccount.private_key || !serviceAccount.client_email) {
-      throw new Error('El JSON no tiene las claves private_key / client_email');
-    }
-    if (serviceAccount.private_key_id === CLAVE_VIEJA_ID) {
-      console.log('Nota: JSON con la clave id ' + CLAVE_VIEJA_ID + ' (la clave actual en uso).');
-    }
-    console.log('Archivo de credenciales:');
-    console.log('  email        :', serviceAccount.client_email);
-    console.log('  key id (nueva):', serviceAccount.private_key_id);
-    console.log('  proyecto     :', serviceAccount.project_id);
-  } catch (error) {
-    console.error('FALLO leyendo el JSON:', error.message);
-    process.exit(1);
-  }
-
-  initializeApp({ credential: applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID });
+  initializeApp({ credential, projectId: process.env.FIREBASE_PROJECT_ID });
 
   try {
     // listUsers prueba de punta a punta: credenciales válidas + token OAuth2 + acceso a Auth

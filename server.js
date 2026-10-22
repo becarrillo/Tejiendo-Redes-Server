@@ -4,12 +4,13 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { applicationDefault, initializeApp } = require('firebase-admin/app');
+const { applicationDefault, cert, initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getStorage } = require('firebase-admin/storage');
 
 // Carga backend/.env (KEY=VALUE) sin sobrescribir variables ya definidas en el entorno.
-// El .env apunta GOOGLE_APPLICATION_CREDENTIALS a un JSON guardado FUERA del repositorio.
+// Las credenciales de Firebase Admin se definen propiedad por propiedad (FIREBASE_*),
+// sin necesidad de archivo JSON en el servidor de despliegue.
 (function loadEnv() {
   try {
     const envPath = path.join(__dirname, '.env');
@@ -31,6 +32,22 @@ app.use(bodyParser.json());
 
 let db = null;
 let firebaseAdminApp = null;
+
+// Credencial de Firebase Admin construida a partir de variables de entorno (FIREBASE_*).
+// Equivalente campo por campo al JSON del service account; no requiere archivo en producción.
+// Si solo se define GOOGLE_APPLICATION_CREDENTIALS (o nada), hace fallback a applicationDefault().
+function credencialFirebase() {
+  if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+    // El PEM llega en una sola línea con los saltos de línea escapados como \n literales.
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+    return cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey
+    });
+  }
+  return applicationDefault();
+}
 
 // ==========================================
 // SESIONES DE ADMIN CON COOKIE (después del login con Firebase)
@@ -112,7 +129,7 @@ function requireAdmin(req, res, next) {
   try {
     if (!firebaseAdminApp) {
       firebaseAdminApp = initializeApp({
-        credential: applicationDefault(),
+        credential: credencialFirebase(),
         projectId: process.env.FIREBASE_PROJECT_ID
       }, 'rifa-api');
     }
@@ -552,7 +569,7 @@ app.post('/api/admin/iniciar-sesion', (req, res) => {
   try {
     if (!firebaseAdminApp) {
       firebaseAdminApp = initializeApp({
-        credential: applicationDefault(),
+        credential: credencialFirebase(),
         projectId: process.env.FIREBASE_PROJECT_ID
       }, 'rifa-api');
     }
@@ -630,7 +647,7 @@ app.post('/api/sorteos/:id/imagen-premio', requireAdmin, express.raw({ type: '*/
     if (!bucketName) return res.status(500).json({ error: 'FIREBASE_STORAGE_BUCKET no está configurado' });
 
     try {
-      const bucket = getStorage(firebaseAdminApp || initializeApp({ credential: applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID }, 'rifa-api')).bucket(bucketName);
+      const bucket = getStorage(firebaseAdminApp || initializeApp({ credential: credencialFirebase(), projectId: process.env.FIREBASE_PROJECT_ID }, 'rifa-api')).bucket(bucketName);
       const extension = contentType === 'image/jpeg' ? 'jpg' : contentType === 'image/png' ? 'png' : 'webp';
       const rutaArchivo = `raffle-prize/${sorteoId}/${Date.now()}.${extension}`;
       const archivo = bucket.file(rutaArchivo);
