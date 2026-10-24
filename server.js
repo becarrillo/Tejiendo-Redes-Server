@@ -154,6 +154,7 @@ function requireAdmin(req, res, next) {
 const allowedOrigins = [
   'https://tejiendo-redes-a375d.web.app',
   'https://tejiendo-redes-a375d.firebaseapp.com',
+  'https://tejiendoredes.shop',
   'https://console.cron-job.org/jobs/8701785'
 ];
 
